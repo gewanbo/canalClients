@@ -21,7 +21,7 @@
         <scala.version>2.10.4</scala.version>
         <file_encoding>UTF-8</file_encoding>
         <com.alibaba.otter.version>1.0.21</com.alibaba.otter.version>
-        <org.springframework.version>3.2.5.RELEASE</org.springframework.version>
+        <org.springframework.version>4.2.6.RELEASE</org.springframework.version>
         <org.mysql-connector-java.version>5.1.27</org.mysql-connector-java.version>
     </properties>
 
@@ -48,6 +48,7 @@
             <artifactId>spring-jdbc</artifactId>
             <version>${org.springframework.version}</version>
         </dependency>
+
         <!-- mysql -->
         <dependency>
             <groupId>mysql</groupId>
