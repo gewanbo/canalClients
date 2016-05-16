@@ -6,4 +6,11 @@
     <entry key="canal.port">11111</entry>
     <entry key="canal.instance">example</entry>
 
+    <entry key="db.1.host">localhost</entry>
+    <entry key="db.1.port">3306</entry>
+    <entry key="db.1.uname">root</entry>
+    <entry key="db.1.upswd">123</entry>
+    <entry key="db.1.dbname">test</entry>
+    <entry key="db.1.writable">true</entry>
+
 </properties>
