@@ -5,6 +5,7 @@ import java.net.InetSocketAddress
 import java.util.Properties
 
 import com.alibaba.otter.canal.client.CanalConnectors
+import com.wanbo.database.MysqlDriver
 import com.wanbo.utils.Logging
 
 /**
@@ -27,6 +28,17 @@ object CmsApp extends CmsCanalClient with Logging {
 
             log.info("Config file load successful!")
 
+            // Initialize data source
+            val dbConf = List(Map(
+                "host" -> config.getProperty("db.1.host"),
+                "port" -> config.getProperty("db.1.port"),
+                "uname" -> config.getProperty("db.1.uname"),
+                "upswd" -> config.getProperty("db.1.upswd"),
+                "dbname" -> config.getProperty("db.1.dbname"),
+                "writable" -> config.getProperty("db.1.writable")))
+            MysqlDriver.initializeDataSource(dbConf)
+
+            // Initialize canal
             val canalServer = config.getProperty("canal.server")
             val canalPort = config.getProperty("canal.port").toInt
             val destination = config.getProperty("canal.instance")
@@ -37,6 +49,7 @@ object CmsApp extends CmsCanalClient with Logging {
 
             val cmsClient = new CmsCanalClient(destination)
             cmsClient.setConnector(connector)
+            cmsClient.setDBDriver(new MysqlDriver)
             cmsClient.start()
 
             Runtime.getRuntime.addShutdownHook(new Thread{

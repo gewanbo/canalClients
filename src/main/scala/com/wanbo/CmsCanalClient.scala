@@ -8,6 +8,7 @@ import com.alibaba.otter.canal.client.CanalConnector
 import com.alibaba.otter.canal.protocol.CanalEntry.{Entry, EntryType, EventType, RowChange}
 import com.alibaba.otter.canal.protocol.Message
 import com.alibaba.otter.canal.protocol.exception.CanalClientException
+import com.wanbo.database.{Driver, MysqlDriver}
 import com.wanbo.utils.Logging
 import org.apache.commons.lang.SystemUtils
 import org.springframework.util.Assert
@@ -33,6 +34,7 @@ class CmsCanalClient() extends Logging {
     val row_format: String             = ""
     val transaction_format: String     = ""
     var destination: String = ""
+    var mysql_driver: MysqlDriver = null
 
     context_format = SEP + "****************************************************" + SEP
     context_format += "* Batch Id: [{}] ,count : [{}] , memsize : [{}] , Time : {}" + SEP
@@ -151,6 +153,10 @@ class CmsCanalClient() extends Logging {
 
                                 log.info("Tag ---->>> before:" + beforeTag + "  after:" + afterTag)
 
+                                //  Delete by tags
+                                deleteTags()
+                                //  Insert new tags
+
                             } else {
                                 // Ignore
                             }
@@ -166,6 +172,34 @@ class CmsCanalClient() extends Logging {
 
             }
         })
+    }
+
+    def deleteTags(): Unit ={
+        try {
+
+            if (mysql_driver == null) {
+                throw new Exception("Didn't initialize mysql driver.")
+            }
+
+            val conn = mysql_driver.getConnector("cmstmp01", writable = true)
+
+            val sql = "SELECT tag_name FROM tag_describes order by ptime desc limit 10;"
+
+            val ps = conn.prepareStatement(sql)
+            val rs = ps.executeQuery()
+
+            while (rs.next()){
+                log.info("-----::::" + rs.getString(1))
+            }
+
+            rs.close()
+            ps.close()
+
+            conn.close()
+        } catch {
+            case e: Exception =>
+                log.error("There something error:", e)
+        }
     }
 
     def start(): Unit = {
@@ -199,5 +233,13 @@ class CmsCanalClient() extends Logging {
 
     def setConnector(connector: CanalConnector): Unit ={
         this.connector = connector
+    }
+
+    def setDBDriver(driver: Driver): Unit = {
+        driver match {
+            case mysql: MysqlDriver =>
+                this.mysql_driver = mysql
+            case _ =>
+        }
     }
 }

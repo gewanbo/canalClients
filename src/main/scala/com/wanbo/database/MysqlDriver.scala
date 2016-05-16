@@ -3,8 +3,8 @@ package com.wanbo.database
 import java.sql.{Connection, SQLException}
 import java.util.Properties
 
-import com.wanbo.database.mysql.{BeanConfig, DataSource}
-import org.springframework.context.annotation.AnnotationConfigApplicationContext
+import com.wanbo.utils.Logging
+import org.springframework.jdbc.datasource.DriverManagerDataSource
 
 /**
  * Mysql driver
@@ -50,9 +50,9 @@ case class MysqlDriver() extends Driver {
     }
 }
 
-object MysqlDriver {
+object MysqlDriver extends Logging {
 
-    private var dataSourceList: List[((String, Boolean), DataSource)] = List[((String, Boolean), DataSource)]()
+    private var dataSourceList: List[((String, Boolean), DriverManagerDataSource)] = List[((String, Boolean), DriverManagerDataSource)]()
 
     /**
      * Initialize all available data source.
@@ -60,6 +60,8 @@ object MysqlDriver {
      * Called by manager when it start up.
      */
     def initializeDataSource(settings: List[Map[String, String]]): Unit ={
+
+        log.info("Initialize Data Source.")
 
         if (settings.nonEmpty) {
             settings.foreach(x => {
@@ -70,9 +72,7 @@ object MysqlDriver {
                 val db_name = x.getOrElse("dbname", "")
                 val db_writable = if (x.get("writable").get.toLowerCase == "true") true else false
 
-                val ctx = new AnnotationConfigApplicationContext(classOf[BeanConfig])
-
-                val ds: DataSource = ctx.getBean(classOf[DataSource])
+                val ds: DriverManagerDataSource = new DriverManagerDataSource()
                 ds.setUrl("jdbc:mysql://%s:%s/%s?characterEncoding=utf-8".format(db_host, db_port, db_name))
                 ds.setUsername(db_username)
                 ds.setPassword(db_password)
