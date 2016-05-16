@@ -71,8 +71,6 @@ class CmsCanalClient() extends Logging {
                 case cce: CanalClientException =>
                     log.error("Canal client exception:", cce)
 
-                    log.info(cce.getCause.toString)
-
                     if(cce.getCause.isInstanceOf[ConnectException]){
                         Thread.sleep(3000)
                     }
@@ -131,9 +129,7 @@ class CmsCanalClient() extends Logging {
 
                     if(schemaName == "cmstmp01" && tableName == "story") {
 
-                        log.info(entry.toString)
-
-                        log.info(SEP + "* Schema Name: [{}] ,Table Name : [{}] , Delay time : [{}]" + SEP, schemaName, tableName, delayTime.toString)
+                        log.info(SEP + "*** Schema Name: [{}] ,Table Name : [{}] , Delay time : [{}] ***" + SEP, schemaName, tableName, delayTime.toString)
 
                         val eventType = rowChange.getEventType
 
@@ -142,20 +138,68 @@ class CmsCanalClient() extends Logging {
                         rowData.foreach(data => {
 
                             if(eventType == EventType.INSERT) {
+                                val afterCols = data.getAfterColumnsList.asScala
+                                val itemId = afterCols.find(_.getName == "id").head.getValue
+                                val itemCheadLine = afterCols.find(_.getName == "cheadline").head.getValue
+                                val itemTag = afterCols.find(_.getName == "tag").head.getValue
+
+                                log.info("INSERT: ---->>> after: id[{}] - cheadline[{}] - tag [{}]", itemId, itemCheadLine, itemTag)
+
+                                if(itemId != "" && itemTag != ""){
+                                    val storyData = itemTag.split(",").map(tag => (itemId, itemCheadLine, tag))
+                                    if(storyData.nonEmpty) {
+                                        addTags(storyData)
+                                    }
+                                }
 
                             } else if (eventType == EventType.DELETE) {
+                                val afterCols = data.getAfterColumnsList.asScala
+                                val itemId = afterCols.find(_.getName == "id").head.getValue
+                                val itemCheadLine = afterCols.find(_.getName == "cheadline").head.getValue
+                                val afterTag = afterCols.find(_.getName == "tag").head.getValue
+
+                                log.info("DELETE: ---->>> after: id[{}] - cheadline[{}] - tag [{}]", itemId, itemCheadLine, afterTag)
+
+                                if(itemId != "") {
+                                    delTags(itemId)
+                                }
 
                             } else if (eventType == EventType.UPDATE) {
-                                val beforeField = data.getBeforeColumnsList.asScala.filter(_.getName == "tag").head
-                                val beforeTag = beforeField.getValue
-                                val afterField = data.getAfterColumnsList.asScala.filter(_.getName == "tag").head
-                                val afterTag = afterField.getValue
+                                val beforeCols = data.getBeforeColumnsList.asScala
+                                val beforeId = beforeCols.find(_.getName == "id").head.getValue
+                                val beforeCheadLine = beforeCols.find(_.getName == "cheadline").head.getValue
+                                val beforeTag = beforeCols.find(_.getName == "tag").head.getValue
 
-                                log.info("Tag ---->>> before:" + beforeTag + "  after:" + afterTag)
+                                val afterCols = data.getAfterColumnsList.asScala
+                                val afterId = afterCols.find(_.getName == "id").head.getValue
+                                val afterCheadLine = afterCols.find(_.getName == "cheadline").head.getValue
+                                val afterTag = afterCols.find(_.getName == "tag").head.getValue
 
-                                //  Delete by tags
-                                deleteTags()
-                                //  Insert new tags
+                                log.info("UPDATE: ---->>> before: id[{}] - cheadline[{}] - tag [{}]", beforeId, beforeCheadLine, beforeTag)
+                                log.info("UPDATE: ---->>> after: id[{}] - cheadline[{}] - tag [{}]", afterId, afterCheadLine, afterTag)
+
+                                // Update tag
+                                if(beforeTag != afterTag) {
+                                    log.info("The tag was changed, start to update tag.")
+                                    if (afterId != "" && afterTag != "") {
+                                        // Delete old data first
+                                        delTags(afterId)
+
+                                        // Then insert new data
+                                        val storyData = afterTag.split(",").map(tag => (afterId, afterCheadLine, tag))
+                                        if (storyData.nonEmpty) {
+                                            addTags(storyData)
+                                        }
+                                    }
+                                } else {
+                                    log.info("There is no necessary to update, the tag data didn't chang.")
+                                }
+
+                                // Update cheadline
+                                if(beforeCheadLine != afterCheadLine){
+                                    log.info("The Cheadline was changed, start to update Cheadline.")
+                                    updateCheadLine(afterId, afterCheadLine)
+                                }
 
                             } else {
                                 // Ignore
@@ -174,32 +218,104 @@ class CmsCanalClient() extends Logging {
         })
     }
 
-    def deleteTags(): Unit ={
+    def addTags(dataList: Array[(String, String, String)]): Unit ={
         try {
 
             if (mysql_driver == null) {
                 throw new Exception("Didn't initialize mysql driver.")
             }
 
-            val conn = mysql_driver.getConnector("cmstmp01", writable = true)
-
-            val sql = "SELECT tag_name FROM tag_describes order by ptime desc limit 10;"
-
-            val ps = conn.prepareStatement(sql)
-            val rs = ps.executeQuery()
-
-            while (rs.next()){
-                log.info("-----::::" + rs.getString(1))
+            if(dataList.isEmpty){
+                throw new Exception("There is no data to save to database.")
             }
 
-            rs.close()
-            ps.close()
+            val conn = mysql_driver.getConnector("cmstmp01", writable = true)
 
+            val sql = "INSERT INTO tag_story VALUES " + dataList.map(x => "('%s','%s','%s')".format(x._3, x._1, x._2)).mkString(",")
+
+            log.info("SQL:" + sql)
+
+            val ps = conn.prepareStatement(sql)
+            val rs = ps.executeUpdate()
+
+            log.info("--->>INSERT Successful>>>--::::" + rs)
+
+            ps.close()
             conn.close()
         } catch {
             case e: Exception =>
                 log.error("There something error:", e)
         }
+    }
+
+    def delTags(storyId: String): Boolean ={
+        var ret = false
+
+        try {
+
+            if (mysql_driver == null) {
+                throw new Exception("Didn't initialize mysql driver.")
+            }
+
+            if(storyId == "") {
+                throw new Exception("Must specify a story id.")
+            }
+
+            val conn = mysql_driver.getConnector("cmstmp01", writable = true)
+
+            val sql = "DELETE FROM tag_story where storyid='%s'".format(storyId)
+
+            val ps = conn.prepareStatement(sql)
+            val rs = ps.executeUpdate()
+
+            log.info("--->>DELETE Successful>>>--::::" + rs)
+
+            if(rs > 0)
+                ret = true
+
+            ps.close()
+            conn.close()
+        } catch {
+            case e: Exception =>
+                log.error("There something error:", e)
+        }
+
+        ret
+    }
+
+    def updateCheadLine(storyId: String, cheadLine: String): Boolean ={
+        var ret = false
+
+        try {
+
+            if (mysql_driver == null) {
+                throw new Exception("Didn't initialize mysql driver.")
+            }
+
+            if(storyId == "") {
+                throw new Exception("Must specify a story id.")
+            }
+
+            val conn = mysql_driver.getConnector("cmstmp01", writable = true)
+
+            val sql = "UPDATE tag_story SET cheadline='%s' where storyid='%s'".format(cheadLine, storyId)
+
+            val ps = conn.prepareStatement(sql)
+            val rs = ps.executeUpdate()
+
+            log.info("--->>UPDATE Successful>>>--::::" + rs)
+
+            if(rs > 0)
+                ret = true
+
+            ps.close()
+            conn.close()
+        } catch {
+            case e: Exception =>
+                log.error("There something error:", e)
+        }
+
+        ret
     }
 
     def start(): Unit = {
