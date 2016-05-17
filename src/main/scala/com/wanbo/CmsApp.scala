@@ -6,6 +6,7 @@ import java.util.Properties
 
 import com.alibaba.otter.canal.client.CanalConnectors
 import com.wanbo.database.MysqlDriver
+import com.wanbo.pipeline.{Pipeline, StoryTagIndex}
 import com.wanbo.utils.Logging
 
 /**
@@ -38,6 +39,14 @@ object CmsApp extends CmsCanalClient with Logging {
                 "writable" -> config.getProperty("db.1.writable")))
             MysqlDriver.initializeDataSource(dbConf)
 
+            // Initialize pipeline list
+            var pipelines = Map[String, Pipeline]()
+
+            val storyTagSubscribe = "cmstmp01.story"
+            val storyTagIndex: Pipeline = new StoryTagIndex
+            storyTagIndex.setDriver(new MysqlDriver)
+            pipelines = pipelines + (storyTagSubscribe -> storyTagIndex)
+
             // Initialize canal
             val canalServer = config.getProperty("canal.server")
             val canalPort = config.getProperty("canal.port").toInt
@@ -47,9 +56,8 @@ object CmsApp extends CmsCanalClient with Logging {
 
             val connector = CanalConnectors.newSingleConnector(new InetSocketAddress(canalServer, canalPort), destination, "", "")
 
-            val cmsClient = new CmsCanalClient(destination)
+            val cmsClient = new CmsCanalClient(destination, pipelines)
             cmsClient.setConnector(connector)
-            cmsClient.setDBDriver(new MysqlDriver)
             cmsClient.start()
 
             Runtime.getRuntime.addShutdownHook(new Thread{
