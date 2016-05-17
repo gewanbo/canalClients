@@ -35,11 +35,16 @@ class StoryTagIndex extends ContentIndex with Pipeline with Logging {
                 val itemId = afterCols.find(_.getName == "id").head.getValue
                 val itemCheadLine = afterCols.find(_.getName == "cheadline").head.getValue
                 val itemTag = afterCols.find(_.getName == "tag").head.getValue
+                val cShortLead = afterCols.find(_.getName == "cshortleadbody").head.getValue
+                val cLongLead = afterCols.find(_.getName == "clongleadbody").head.getValue
+                val pubDate = afterCols.find(_.getName == "last_publish_time").head.getValue
+
+                val cLead = if(cLongLead.length > cShortLead.length) cLongLead else cShortLead
 
                 log.info("INSERT: ---->>> after: id[{}] - cheadline[{}] - tag [{}]", itemId, itemCheadLine, itemTag)
 
                 if(itemId != "" && itemTag != ""){
-                    val storyData = itemTag.split(",").filter(_!="").map(tag => (itemId, itemCheadLine, tag))
+                    val storyData = itemTag.split(",").filter(_!="").map(tag => (tag, itemId, itemCheadLine, cLead, pubDate))
                     if(storyData.nonEmpty) {
                         addProperties(_contentType, storyData)
                     }
@@ -62,36 +67,53 @@ class StoryTagIndex extends ContentIndex with Pipeline with Logging {
                 val beforeId = beforeCols.find(_.getName == "id").head.getValue
                 val beforeCheadLine = beforeCols.find(_.getName == "cheadline").head.getValue
                 val beforeTag = beforeCols.find(_.getName == "tag").head.getValue
+                val beforeShortLead = beforeCols.find(_.getName == "cshortleadbody").head.getValue
+                val beforeLongLead = beforeCols.find(_.getName == "clongleadbody").head.getValue
 
                 val afterCols = data.getAfterColumnsList.asScala
                 val afterId = afterCols.find(_.getName == "id").head.getValue
                 val afterCheadLine = afterCols.find(_.getName == "cheadline").head.getValue
                 val afterTag = afterCols.find(_.getName == "tag").head.getValue
+                val afterShortLead = afterCols.find(_.getName == "cshortleadbody").head.getValue
+                val afterLongLead = afterCols.find(_.getName == "clongleadbody").head.getValue
+                val pubDate = afterCols.find(_.getName == "last_publish_time").head.getValue
+
+                val cLead = if(afterLongLead.length > afterShortLead.length) afterLongLead else afterShortLead
 
                 log.info("UPDATE: ---->>> before: id[{}] - cheadline[{}] - tag [{}]", beforeId, beforeCheadLine, beforeTag)
                 log.info("UPDATE: ---->>> after: id[{}] - cheadline[{}] - tag [{}]", afterId, afterCheadLine, afterTag)
 
-                // Update tag
-                if(beforeTag != afterTag) {
-                    log.info("The tag was changed, start to update tag.")
-                    if (afterId != "") {
+                if (afterId != "") {
+
+                    // Update tag
+                    if (beforeTag != afterTag) {
+                        log.info("The tag was changed, start to update tag.")
+
                         // Delete old data first
                         delProperties(_contentType, afterId)
 
                         // Then insert new data
-                        val storyData = afterTag.split(",").filter(_!="").map(tag => (afterId, afterCheadLine, tag))
+                        val storyData = afterTag.split(",").filter(_ != "").map(tag => (tag, afterId, afterCheadLine, cLead, pubDate))
                         if (storyData.nonEmpty) {
                             addProperties(_contentType, storyData)
                         }
-                    }
-                } else {
-                    log.info("There is no necessary to update, the tag data didn't chang.")
-                }
 
-                // Update cheadline
-                if(beforeCheadLine != afterCheadLine){
-                    log.info("The Cheadline was changed, start to update Cheadline.")
-                    updateCheadLine(afterId, _contentType, afterCheadLine)
+                    } else {
+                        log.info("There is no necessary to update, the tag data didn't chang.")
+
+                        // Update cheadline
+                        if (beforeCheadLine != afterCheadLine) {
+                            log.info("The Cheadline was changed, start to update Cheadline.")
+                            updateCheadLine(afterId, _contentType, afterCheadLine)
+                        }
+
+                        // Update lead
+                        if (beforeShortLead != afterShortLead || beforeLongLead != afterLongLead) {
+                            log.info("The lead was changed, start to update lead.")
+                            updateLead(afterId, _contentType, cLead)
+                        }
+                    }
+
                 }
 
             } else {
@@ -101,7 +123,7 @@ class StoryTagIndex extends ContentIndex with Pipeline with Logging {
         })
     }
 
-    def addProperties(contentType: Int, dataList: Array[(String, String, String)]): Unit ={
+    def addProperties(contentType: Int, dataList: Array[(String, String, String, String, String)]): Unit ={
         try {
 
             if (mysql_driver == null) {
@@ -114,7 +136,8 @@ class StoryTagIndex extends ContentIndex with Pipeline with Logging {
 
             val conn = mysql_driver.getConnector("cmstmp01", writable = true)
 
-            val sql = "INSERT INTO tag_content VALUES " + dataList.map(x => "('%s','%s',%d,'%s')".format(x._3, x._1, contentType, x._2)).mkString(",")
+            val sql = "INSERT INTO tag_content (`tag`, `contentid`, `type`, `cheadline`, `clead`, `pubdate`) VALUES " +
+                dataList.map(x => "('%s','%s',%d,'%s','%s','%s')".format(x._1, x._2, contentType, x._3, x._4, x._5)).mkString(",")
 
             log.info("SQL:" + sql)
 
@@ -182,6 +205,41 @@ class StoryTagIndex extends ContentIndex with Pipeline with Logging {
             val conn = mysql_driver.getConnector("cmstmp01", writable = true)
 
             val sql = "UPDATE tag_content SET cheadline='%s' where contentid='%s' and `type`=%d".format(cheadLine, contentId, contentType)
+
+            val ps = conn.prepareStatement(sql)
+            val rs = ps.executeUpdate()
+
+            log.info("--->>UPDATE Successful>>>--::::" + rs)
+
+            if(rs > 0)
+                ret = true
+
+            ps.close()
+            conn.close()
+        } catch {
+            case e: Exception =>
+                log.error("There something error:", e)
+        }
+
+        ret
+    }
+
+    def updateLead(contentId: String, contentType: Int, lead: String): Boolean ={
+        var ret = false
+
+        try {
+
+            if (mysql_driver == null) {
+                throw new Exception("Didn't initialize mysql driver.")
+            }
+
+            if(contentId == "") {
+                throw new Exception("Must specify a story id.")
+            }
+
+            val conn = mysql_driver.getConnector("cmstmp01", writable = true)
+
+            val sql = "UPDATE tag_content SET clead='%s' where contentid='%s' and `type`=%d".format(lead, contentId, contentType)
 
             val ps = conn.prepareStatement(sql)
             val rs = ps.executeUpdate()

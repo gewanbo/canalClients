@@ -11,7 +11,8 @@ abstract class ContentIndex {
     protected var _contentType = 0
 
     def init()
-    def addProperties(contentType: Int, dataList: Array[(String, String, String)])
+    def addProperties(contentType: Int, dataList: Array[(String, String, String, String, String)])
     def delProperties(contentType: Int, contentId: String): Boolean
     def updateCheadLine(contentId: String, contentType: Int, cheadLine: String): Boolean
+    def updateLead(contentId: String, contentType: Int, lead: String): Boolean
 }
