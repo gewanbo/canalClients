@@ -127,7 +127,12 @@ class CmsCanalClient() extends Logging {
                 try {
                     val rowChange = RowChange.parseFrom(entry.getStoreValue)
 
+                    var contentType = 0 // 1: Story  2: video  3: interactive  4: photonews
+
                     if(schemaName == "cmstmp01" && tableName == "story") {
+
+                        // Set content type
+                        contentType = 1
 
                         log.info(SEP + "*** Schema Name: [{}] ,Table Name : [{}] , Delay time : [{}] ***" + SEP, schemaName, tableName, delayTime.toString)
 
@@ -148,7 +153,7 @@ class CmsCanalClient() extends Logging {
                                 if(itemId != "" && itemTag != ""){
                                     val storyData = itemTag.split(",").map(tag => (itemId, itemCheadLine, tag))
                                     if(storyData.nonEmpty) {
-                                        addTags(storyData)
+                                        addTags(contentType, storyData)
                                     }
                                 }
 
@@ -161,7 +166,7 @@ class CmsCanalClient() extends Logging {
                                 log.info("DELETE: ---->>> after: id[{}] - cheadline[{}] - tag [{}]", itemId, itemCheadLine, afterTag)
 
                                 if(itemId != "") {
-                                    delTags(itemId)
+                                    delTags(contentType, itemId)
                                 }
 
                             } else if (eventType == EventType.UPDATE) {
@@ -183,12 +188,12 @@ class CmsCanalClient() extends Logging {
                                     log.info("The tag was changed, start to update tag.")
                                     if (afterId != "" && afterTag != "") {
                                         // Delete old data first
-                                        delTags(afterId)
+                                        delTags(contentType, afterId)
 
                                         // Then insert new data
                                         val storyData = afterTag.split(",").map(tag => (afterId, afterCheadLine, tag))
                                         if (storyData.nonEmpty) {
-                                            addTags(storyData)
+                                            addTags(contentType, storyData)
                                         }
                                     }
                                 } else {
@@ -198,7 +203,7 @@ class CmsCanalClient() extends Logging {
                                 // Update cheadline
                                 if(beforeCheadLine != afterCheadLine){
                                     log.info("The Cheadline was changed, start to update Cheadline.")
-                                    updateCheadLine(afterId, afterCheadLine)
+                                    updateCheadLine(afterId, contentType, afterCheadLine)
                                 }
 
                             } else {
@@ -218,7 +223,7 @@ class CmsCanalClient() extends Logging {
         })
     }
 
-    def addTags(dataList: Array[(String, String, String)]): Unit ={
+    def addTags(contentType: Int, dataList: Array[(String, String, String)]): Unit ={
         try {
 
             if (mysql_driver == null) {
@@ -231,7 +236,7 @@ class CmsCanalClient() extends Logging {
 
             val conn = mysql_driver.getConnector("cmstmp01", writable = true)
 
-            val sql = "INSERT INTO tag_story VALUES " + dataList.map(x => "('%s','%s','%s')".format(x._3, x._1, x._2)).mkString(",")
+            val sql = "INSERT INTO tag_content VALUES " + dataList.map(x => "('%s','%s',%d,'%s')".format(x._3, x._1, contentType, x._2)).mkString(",")
 
             log.info("SQL:" + sql)
 
@@ -248,7 +253,7 @@ class CmsCanalClient() extends Logging {
         }
     }
 
-    def delTags(storyId: String): Boolean ={
+    def delTags(contentType: Int, contentId: String): Boolean ={
         var ret = false
 
         try {
@@ -257,13 +262,13 @@ class CmsCanalClient() extends Logging {
                 throw new Exception("Didn't initialize mysql driver.")
             }
 
-            if(storyId == "") {
+            if(contentId == "") {
                 throw new Exception("Must specify a story id.")
             }
 
             val conn = mysql_driver.getConnector("cmstmp01", writable = true)
 
-            val sql = "DELETE FROM tag_story where storyid='%s'".format(storyId)
+            val sql = "DELETE FROM tag_content where contentid='%s' and `type`=%d".format(contentId, contentType)
 
             val ps = conn.prepareStatement(sql)
             val rs = ps.executeUpdate()
@@ -283,7 +288,7 @@ class CmsCanalClient() extends Logging {
         ret
     }
 
-    def updateCheadLine(storyId: String, cheadLine: String): Boolean ={
+    def updateCheadLine(contentId: String, contentType: Int, cheadLine: String): Boolean ={
         var ret = false
 
         try {
@@ -292,13 +297,13 @@ class CmsCanalClient() extends Logging {
                 throw new Exception("Didn't initialize mysql driver.")
             }
 
-            if(storyId == "") {
+            if(contentId == "") {
                 throw new Exception("Must specify a story id.")
             }
 
             val conn = mysql_driver.getConnector("cmstmp01", writable = true)
 
-            val sql = "UPDATE tag_story SET cheadline='%s' where storyid='%s'".format(cheadLine, storyId)
+            val sql = "UPDATE tag_content SET cheadline='%s' where contentid='%s' and `type`=%d".format(cheadLine, contentId, contentType)
 
             val ps = conn.prepareStatement(sql)
             val rs = ps.executeUpdate()
