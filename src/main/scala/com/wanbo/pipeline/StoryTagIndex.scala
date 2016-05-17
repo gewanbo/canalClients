@@ -1,0 +1,207 @@
+package com.wanbo.pipeline
+import com.alibaba.otter.canal.protocol.CanalEntry.{EventType, RowChange}
+import com.wanbo.channel.ContentIndex
+import com.wanbo.database.MysqlDriver
+import com.wanbo.utils.Logging
+
+import scala.collection.JavaConverters._
+
+/**
+  * Created by wanbo on 16/5/17.
+  */
+class StoryTagIndex extends ContentIndex with Pipeline with Logging {
+
+    private var mysql_driver: MysqlDriver = null
+
+    init()
+
+    def init(): Unit ={
+        // Set content type 1 (Story)
+        _contentType = 1
+    }
+
+    override def process(changedRow: RowChange): Unit = {
+
+        log.info("****** Story tag index pipeline ******")
+
+        val eventType = changedRow.getEventType
+
+        val rowData = changedRow.getRowDatasList.asScala.toList
+
+        rowData.foreach(data => {
+
+            if(eventType == EventType.INSERT) {
+                val afterCols = data.getAfterColumnsList.asScala
+                val itemId = afterCols.find(_.getName == "id").head.getValue
+                val itemCheadLine = afterCols.find(_.getName == "cheadline").head.getValue
+                val itemTag = afterCols.find(_.getName == "tag").head.getValue
+
+                log.info("INSERT: ---->>> after: id[{}] - cheadline[{}] - tag [{}]", itemId, itemCheadLine, itemTag)
+
+                if(itemId != "" && itemTag != ""){
+                    val storyData = itemTag.split(",").filter(_!="").map(tag => (itemId, itemCheadLine, tag))
+                    if(storyData.nonEmpty) {
+                        addProperties(_contentType, storyData)
+                    }
+                }
+
+            } else if (eventType == EventType.DELETE) {
+                val afterCols = data.getAfterColumnsList.asScala
+                val itemId = afterCols.find(_.getName == "id").head.getValue
+                val itemCheadLine = afterCols.find(_.getName == "cheadline").head.getValue
+                val afterTag = afterCols.find(_.getName == "tag").head.getValue
+
+                log.info("DELETE: ---->>> after: id[{}] - cheadline[{}] - tag [{}]", itemId, itemCheadLine, afterTag)
+
+                if(itemId != "") {
+                    delProperties(_contentType, itemId)
+                }
+
+            } else if (eventType == EventType.UPDATE) {
+                val beforeCols = data.getBeforeColumnsList.asScala
+                val beforeId = beforeCols.find(_.getName == "id").head.getValue
+                val beforeCheadLine = beforeCols.find(_.getName == "cheadline").head.getValue
+                val beforeTag = beforeCols.find(_.getName == "tag").head.getValue
+
+                val afterCols = data.getAfterColumnsList.asScala
+                val afterId = afterCols.find(_.getName == "id").head.getValue
+                val afterCheadLine = afterCols.find(_.getName == "cheadline").head.getValue
+                val afterTag = afterCols.find(_.getName == "tag").head.getValue
+
+                log.info("UPDATE: ---->>> before: id[{}] - cheadline[{}] - tag [{}]", beforeId, beforeCheadLine, beforeTag)
+                log.info("UPDATE: ---->>> after: id[{}] - cheadline[{}] - tag [{}]", afterId, afterCheadLine, afterTag)
+
+                // Update tag
+                if(beforeTag != afterTag) {
+                    log.info("The tag was changed, start to update tag.")
+                    if (afterId != "") {
+                        // Delete old data first
+                        delProperties(_contentType, afterId)
+
+                        // Then insert new data
+                        val storyData = afterTag.split(",").filter(_!="").map(tag => (afterId, afterCheadLine, tag))
+                        if (storyData.nonEmpty) {
+                            addProperties(_contentType, storyData)
+                        }
+                    }
+                } else {
+                    log.info("There is no necessary to update, the tag data didn't chang.")
+                }
+
+                // Update cheadline
+                if(beforeCheadLine != afterCheadLine){
+                    log.info("The Cheadline was changed, start to update Cheadline.")
+                    updateCheadLine(afterId, _contentType, afterCheadLine)
+                }
+
+            } else {
+                // Ignore
+            }
+
+        })
+    }
+
+    def addProperties(contentType: Int, dataList: Array[(String, String, String)]): Unit ={
+        try {
+
+            if (mysql_driver == null) {
+                throw new Exception("Didn't initialize mysql driver.")
+            }
+
+            if(dataList.isEmpty){
+                throw new Exception("There is no data to save to database.")
+            }
+
+            val conn = mysql_driver.getConnector("cmstmp01", writable = true)
+
+            val sql = "INSERT INTO tag_content VALUES " + dataList.map(x => "('%s','%s',%d,'%s')".format(x._3, x._1, contentType, x._2)).mkString(",")
+
+            log.info("SQL:" + sql)
+
+            val ps = conn.prepareStatement(sql)
+            val rs = ps.executeUpdate()
+
+            log.info("--->>INSERT Successful>>>--::::" + rs)
+
+            ps.close()
+            conn.close()
+        } catch {
+            case e: Exception =>
+                log.error("There something error:", e)
+        }
+    }
+
+    def delProperties(contentType: Int, contentId: String): Boolean ={
+        var ret = false
+
+        try {
+
+            if (mysql_driver == null) {
+                throw new Exception("Didn't initialize mysql driver.")
+            }
+
+            if(contentId == "") {
+                throw new Exception("Must specify a story id.")
+            }
+
+            val conn = mysql_driver.getConnector("cmstmp01", writable = true)
+
+            val sql = "DELETE FROM tag_content where contentid='%s' and `type`=%d".format(contentId, contentType)
+
+            val ps = conn.prepareStatement(sql)
+            val rs = ps.executeUpdate()
+
+            log.info("--->>DELETE Successful>>>--::::" + rs)
+
+            if(rs > 0)
+                ret = true
+
+            ps.close()
+            conn.close()
+        } catch {
+            case e: Exception =>
+                log.error("There something error:", e)
+        }
+
+        ret
+    }
+
+    def updateCheadLine(contentId: String, contentType: Int, cheadLine: String): Boolean ={
+        var ret = false
+
+        try {
+
+            if (mysql_driver == null) {
+                throw new Exception("Didn't initialize mysql driver.")
+            }
+
+            if(contentId == "") {
+                throw new Exception("Must specify a story id.")
+            }
+
+            val conn = mysql_driver.getConnector("cmstmp01", writable = true)
+
+            val sql = "UPDATE tag_content SET cheadline='%s' where contentid='%s' and `type`=%d".format(cheadLine, contentId, contentType)
+
+            val ps = conn.prepareStatement(sql)
+            val rs = ps.executeUpdate()
+
+            log.info("--->>UPDATE Successful>>>--::::" + rs)
+
+            if(rs > 0)
+                ret = true
+
+            ps.close()
+            conn.close()
+        } catch {
+            case e: Exception =>
+                log.error("There something error:", e)
+        }
+
+        ret
+    }
+
+    override def setDriver(driver: MysqlDriver): Unit = {
+        mysql_driver = driver
+    }
+}
