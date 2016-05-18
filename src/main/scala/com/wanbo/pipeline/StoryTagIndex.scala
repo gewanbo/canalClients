@@ -44,7 +44,7 @@ class StoryTagIndex extends ContentIndex with Pipeline with Logging {
                 log.info("INSERT: ---->>> after: id[{}] - cheadline[{}] - tag [{}]", itemId, itemCheadLine, itemTag)
 
                 if(itemId != "" && itemTag != ""){
-                    val storyData = itemTag.split(",").filter(_!="").map(tag => (tag.trim, itemId, itemCheadLine, cLead, pubDate))
+                    val storyData = itemTag.split(",").filter(_!="").distinct.map(tag => (tag.trim, itemId, itemCheadLine, cLead, pubDate))
                     if(storyData.nonEmpty) {
                         addProperties(_contentType, storyData)
                     }
@@ -93,7 +93,7 @@ class StoryTagIndex extends ContentIndex with Pipeline with Logging {
                         delProperties(_contentType, afterId)
 
                         // Then insert new data
-                        val storyData = afterTag.split(",").filter(_ != "").map(tag => (tag.trim, afterId, afterCheadLine, cLead, pubDate))
+                        val storyData = afterTag.split(",").filter(_ != "").distinct.map(tag => (tag.trim, afterId, afterCheadLine, cLead, pubDate))
                         if (storyData.nonEmpty) {
                             addProperties(_contentType, storyData)
                         }

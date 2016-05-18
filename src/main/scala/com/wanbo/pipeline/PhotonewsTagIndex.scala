@@ -42,7 +42,7 @@ class PhotonewsTagIndex extends ContentIndex with Pipeline with Logging {
                 log.info("INSERT: ---->>> after: id[{}] - cheadline[{}] - tag [{}]", itemId, itemCheadLine, itemTag)
 
                 if(itemId != "" && itemTag != ""){
-                    val storyData = itemTag.split(",").filter(_!="").map(tag => (tag.trim, itemId, itemCheadLine, lead, pubDate))
+                    val storyData = itemTag.split(",").filter(_!="").distinct.map(tag => (tag.trim, itemId, itemCheadLine, lead, pubDate))
                     if(storyData.nonEmpty) {
                         addProperties(_contentType, storyData)
                     }
@@ -87,7 +87,7 @@ class PhotonewsTagIndex extends ContentIndex with Pipeline with Logging {
                         delProperties(_contentType, afterId)
 
                         // Then insert new data
-                        val storyData = afterTag.split(",").filter(_ != "").map(tag => (tag.trim, afterId, afterCheadLine, afterLead, pubDate))
+                        val storyData = afterTag.split(",").filter(_ != "").distinct.map(tag => (tag.trim, afterId, afterCheadLine, afterLead, pubDate))
                         if (storyData.nonEmpty) {
                             addProperties(_contentType, storyData)
                         }
