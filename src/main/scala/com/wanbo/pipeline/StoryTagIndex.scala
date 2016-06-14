@@ -13,6 +13,8 @@ class StoryTagIndex extends ContentIndex with Pipeline with Logging {
 
     private var mysql_driver: MysqlDriver = null
 
+    private val keepTotalNum = 5
+
     init()
 
     def init(): Unit ={
@@ -147,6 +149,36 @@ class StoryTagIndex extends ContentIndex with Pipeline with Logging {
             log.info("--->>INSERT Successful>>>--::::" + rs)
 
             ps.close()
+
+            // Keep total items start
+            dataList.foreach(x => {
+                val tag = x._1
+                val totalSql = "SELECT contentid FROM tag_content where tag='%s' and `type`=%d order by pubdate desc, contentid desc limit %d, 10;".format(tag, _contentType, keepTotalNum)
+
+                val mPs = conn.prepareStatement(totalSql)
+                val mRs = mPs.executeQuery(totalSql)
+
+                var contentIds = Set[String]()
+                while (mRs.next()){
+                    contentIds = contentIds + mRs.getString(1)
+                }
+
+                mRs.close()
+                mPs.close()
+
+                if(contentIds.nonEmpty) {
+                    val delSql = "DELETE FROM tag_content where tag='%s' and `type`=%d and contentid in (%s);".format(tag, _contentType, contentIds.mkString("'", "','", "'"))
+                    val nPs = conn.prepareStatement(delSql)
+                    val nRs = nPs.executeUpdate()
+
+                    if(nRs > 0)
+                        log.info("--->>For keeping total items, [%d] records delete successful >>>--::::".format(nRs))
+
+                    nPs.close()
+                }
+            })
+            // Keep total items end
+
             conn.close()
         } catch {
             case e: Exception =>
