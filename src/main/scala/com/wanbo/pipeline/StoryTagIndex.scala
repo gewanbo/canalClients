@@ -12,7 +12,7 @@ import scala.collection.JavaConverters._
   */
 class StoryTagIndex extends ContentIndex with Pipeline with Logging {
 
-    private val mysql_driver: MysqlDriver = DriverPool.getDriver("mysql", isWritable = true).asInstanceOf[MysqlDriver]
+    private val mysql_driver: MysqlDriver = DriverPool.getDriver("mysql", isWritable = true).orNull.asInstanceOf[MysqlDriver]
 
     private val keepTotalNum = 5
 
