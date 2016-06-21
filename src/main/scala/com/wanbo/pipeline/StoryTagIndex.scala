@@ -1,7 +1,8 @@
 package com.wanbo.pipeline
+
 import com.alibaba.otter.canal.protocol.CanalEntry.{EventType, RowChange}
 import com.wanbo.channel.ContentIndex
-import com.wanbo.database.MysqlDriver
+import com.wanbo.database.{DriverPool, MysqlDriver}
 import com.wanbo.utils.Logging
 
 import scala.collection.JavaConverters._
@@ -11,7 +12,7 @@ import scala.collection.JavaConverters._
   */
 class StoryTagIndex extends ContentIndex with Pipeline with Logging {
 
-    private var mysql_driver: MysqlDriver = null
+    private val mysql_driver: MysqlDriver = DriverPool.getDriver("mysql", isWritable = true).asInstanceOf[MysqlDriver]
 
     private val keepTotalNum = 5
 
@@ -291,7 +292,4 @@ class StoryTagIndex extends ContentIndex with Pipeline with Logging {
         ret
     }
 
-    override def setDriver(driver: MysqlDriver): Unit = {
-        mysql_driver = driver
-    }
 }
