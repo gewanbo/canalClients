@@ -1,14 +1,17 @@
 package com.wanbo
 
+import java.io.FileInputStream
 import java.lang.Thread.UncaughtExceptionHandler
-import java.net.ConnectException
+import java.net.{ConnectException, InetSocketAddress}
 import java.text.SimpleDateFormat
+import java.util.Properties
 
-import com.alibaba.otter.canal.client.CanalConnector
+import com.alibaba.otter.canal.client.{CanalConnector, CanalConnectors}
 import com.alibaba.otter.canal.protocol.CanalEntry.{Entry, EntryType, RowChange}
 import com.alibaba.otter.canal.protocol.Message
 import com.alibaba.otter.canal.protocol.exception.CanalClientException
-import com.wanbo.pipeline.Pipeline
+import com.wanbo.database.{DriverPool, MysqlDriver}
+import com.wanbo.pipeline.{InteractiveTagIndex, PhotonewsTagIndex, Pipeline, StoryTagIndex}
 import com.wanbo.utils.Logging
 import org.apache.commons.lang.SystemUtils
 import org.springframework.util.Assert
@@ -19,7 +22,86 @@ import scala.collection.mutable
 /**
   * Created by wanbo on 16/5/11.
   */
-class CmsCanalClient() extends Logging {
+object CmsIndexCanalClient extends Logging {
+    def main(args: Array[String]) {
+
+        try {
+            val config = new Properties()
+
+            log.info("Start to load config file.")
+            val configFile = System.getProperty("easy.conf")
+            log.info("Config file:" + configFile)
+
+            val is = new FileInputStream(configFile)
+            config.loadFromXML(is)
+            is.close()
+
+            log.info("Config file load successful!")
+
+            // Initialize data source
+            val dbConf = new Properties()
+            dbConf.put("host", config.getProperty("db.1.host"))
+            dbConf.put("port", config.getProperty("db.1.port"))
+            dbConf.put("uname", config.getProperty("db.1.uname"))
+            dbConf.put("upswd", config.getProperty("db.1.upswd"))
+            dbConf.put("dbname", config.getProperty("db.1.dbname"))
+            dbConf.put("writable", config.getProperty("db.1.writable"))
+
+            val mysqlDriver = new MysqlDriver
+            mysqlDriver.setConfiguration(dbConf)
+
+            DriverPool.appendDriver(mysqlDriver)
+
+            // Initialize pipeline list
+            var pipelines = Map[String, Pipeline]()
+
+            val storyTagSubscribe = "cmstmp01.story"
+            val storyTagIndex: Pipeline = new StoryTagIndex
+            pipelines = pipelines + (storyTagSubscribe -> storyTagIndex)
+
+            val interactiveTagSubscribe = "cmstmp01.interactive_story"
+            val interactiveTagIndex: Pipeline = new InteractiveTagIndex
+            pipelines = pipelines + (interactiveTagSubscribe -> interactiveTagIndex)
+
+            val photonewsTagSubscribe = "cmstmp01.photonews"
+            val photonewsTagIndex: Pipeline = new PhotonewsTagIndex
+            pipelines = pipelines + (photonewsTagSubscribe -> photonewsTagIndex)
+
+            // Initialize canal
+            val canalServer = config.getProperty("canal.server")
+            val canalPort = config.getProperty("canal.port").toInt
+            val destination = config.getProperty("canal.instance")
+
+            log.info("canal: server-{} port-{} instance-{}", canalServer, canalPort.toString, destination)
+
+            val connector = CanalConnectors.newSingleConnector(new InetSocketAddress(canalServer, canalPort), destination, "", "")
+
+            val cmsClient = new CmsIndexCanalClient(destination, pipelines)
+            cmsClient.setConnector(connector)
+            cmsClient.start()
+
+            Runtime.getRuntime.addShutdownHook(new Thread{
+                override def run(): Unit ={
+                    try {
+                        cmsClient.stop()
+                    } catch {
+                        case e: Exception =>
+                            log.warn("Something goes wrong when stopping canal:", e)
+                    } finally {
+                        log.info("### Cannal client is down. ###")
+                    }
+                }
+            })
+
+        } catch {
+            case e: Exception =>
+                log.error("Error:", e)
+        }
+
+    }
+}
+
+class CmsIndexCanalClient() extends Logging {
     val SEP: String                    = SystemUtils.LINE_SEPARATOR
     val DATE_FORMAT: String            = "yyyy-MM-dd HH:mm:ss"
     var running = false
