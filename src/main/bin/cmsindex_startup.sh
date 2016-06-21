@@ -90,7 +90,7 @@ then
 	echo LOG CONFIGURATION : ${logback_configurationFile}
 	echo Easy conf : ${easy_conf}
 	echo CLASSPATH :${CLASSPATH}
-	${JAVA} ${JAVA_OPTS} ${JAVA_DEBUG_OPT} ${EASY_OPTS} -classpath .:${CLASSPATH} com.wanbo.cmsIndexCanalClient 1>>${base}/logs/cmsindex.log 2>&1 &
+	${JAVA} ${JAVA_OPTS} ${JAVA_DEBUG_OPT} ${EASY_OPTS} -classpath .:${CLASSPATH} com.wanbo.CmsIndexCanalClient 1>>${base}/logs/cmsindex.log 2>&1 &
 	echo $! > ${base}/bin/cmsindex.pid
 	
 	echo "cd to $current_path for continue"
