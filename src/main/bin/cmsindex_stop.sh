@@ -25,24 +25,24 @@ get_pid() {
 }
 
 base=`dirname $0`/..
-pidfile=${base}/bin/cmsapp.pid
+pidfile=${base}/bin/cmsindex.pid
 if [ ! -f "$pidfile" ];then
-	echo "cmsapp is not running. exists"
+	echo "cmsindex is not running. exists"
 	exit
 fi
 
 pid=`cat ${pidfile}`
 if [ "$pid" == "" ] ; then
-	pid=`get_pid "appName=cmsapp"`
+	pid=`get_pid "appName=cmsindex"`
 fi
 
-echo -e "`hostname`: stopping cmsapp $pid ... "
+echo -e "`hostname`: stopping cmsindex $pid ... "
 kill ${pid}
 
 LOOPS=0
 while (true); 
 do 
-	gpid=`get_pid "appName=cmsapp" "$pid"`
+	gpid=`get_pid "appName=cmsindex" "$pid"`
     if [ "$gpid" == "" ] ; then
     	echo "Oook! cost:$LOOPS"
     	`rm ${pidfile}`
