@@ -2,9 +2,9 @@
 <!DOCTYPE properties SYSTEM "http://java.sun.com/dtd/properties.dtd">
 <properties>
     <comment/>
-    <entry key="canal.server">localhost</entry>
+    <entry key="canal.server">bjtest6</entry>
     <entry key="canal.port">11111</entry>
-    <entry key="canal.instance">example</entry>
+    <entry key="canal.instance">cmsindex</entry>
 
     <entry key="db.1.host">localhost</entry>
     <entry key="db.1.port">3306</entry>
