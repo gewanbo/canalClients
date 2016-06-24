@@ -7,5 +7,5 @@ import com.wanbo.lib.Content
   */
 abstract class Cms2HBase {
     def addProperties(content: Content)
-    def delProperties(contentId: String)
+    def delProperties(contentId: String): Boolean
 }
