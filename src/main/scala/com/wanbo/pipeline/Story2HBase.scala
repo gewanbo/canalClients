@@ -40,7 +40,7 @@ class Story2HBase extends Cms2HBase with Pipeline with Logging {
                 val itemCheadLine = afterCols.find(_.getName == "cheadline").head.getValue
 
 
-                log.info("INSERT: ---->>> after: id[{}] - cheadline[{}]", itemId, itemCheadLine)
+                log.info("INSERT: ---->>> after: id[{}] - cheadline[{}] - {}", itemId, itemCheadLine, "")
 
                 if(itemId != "" && itemCheadLine != ""){
                     addProperties(Story(itemId, itemCheadLine))
@@ -51,7 +51,7 @@ class Story2HBase extends Cms2HBase with Pipeline with Logging {
                 val itemId = afterCols.find(_.getName == "id").head.getValue
                 val itemCheadLine = afterCols.find(_.getName == "cheadline").head.getValue
 
-                log.info("DELETE: ---->>> after: id[{}] - cheadline[{}]", itemId, itemCheadLine)
+                log.info("DELETE: ---->>> after: id[{}] - cheadline[{}] - {}", itemId, itemCheadLine, "")
 
                 if(itemId != "") {
                     delProperties(itemId)
@@ -67,11 +67,13 @@ class Story2HBase extends Cms2HBase with Pipeline with Logging {
                 val afterCheadLine = afterCols.find(_.getName == "cheadline").head.getValue
 
 
-                log.info("UPDATE: ---->>> before: id[{}] - cheadline[{}]", beforeId, beforeCheadLine)
-                log.info("UPDATE: ---->>> after: id[{}] - cheadline[{}]", afterId, afterCheadLine)
+                log.info("UPDATE: ---->>> before: id[{}] - cheadline[{}] - {}", beforeId, beforeCheadLine, "")
+                log.info("UPDATE: ---->>> after: id[{}] - cheadline[{}] - {}", afterId, afterCheadLine, "")
 
                 if (afterId != "" && beforeCheadLine != afterCheadLine) {
                     addProperties(Story(afterId, afterCheadLine))
+                } else {
+                    log.info("There is no necessary to update, the story data didn't chang.")
                 }
 
             } else {
