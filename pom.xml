@@ -6,7 +6,7 @@
 
     <groupId>com.wanbo</groupId>
     <artifactId>canalClients</artifactId>
-    <version>1.3.3-SNAPSHOT</version>
+    <version>1.3.4-SNAPSHOT</version>
 
     <developers>
         <developer>
@@ -40,6 +40,12 @@
             <groupId>com.alibaba.otter</groupId>
             <artifactId>canal.client</artifactId>
             <version>${com.alibaba.otter.version}</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>org.slf4j</groupId>
+                    <artifactId>jcl-over-slf4j</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
         <!-- spring -->
         <dependency>
